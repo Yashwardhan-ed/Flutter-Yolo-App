@@ -1,17 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_vision/flutter_vision.dart';
 import 'package:camera/camera.dart';
+import 'dart:io';
 
 late List<CameraDescription> cameras;
 
 void main() async {
+  print(Platform.numberOfProcessors);
   WidgetsFlutterBinding.ensureInitialized();
   cameras = await availableCameras();
-  runApp(
-    const MaterialApp(
-      home: YoloVideo(),
-    ),
-  );
+  runApp(const MaterialApp(home: YoloVideo()));
 }
 
 class YoloVideo extends StatefulWidget {
@@ -26,6 +24,9 @@ class _YoloVideoState extends State<YoloVideo> {
   late FlutterVision vision;
   late List<Map<String, dynamic>> yoloResults;
   CameraImage? cameraImage;
+  int frameCount = 0;
+  int frameSkip = 2;
+  bool isProcessing = false;
   bool isLoaded = false;
   bool isDetecting = false;
 
@@ -61,9 +62,7 @@ class _YoloVideoState extends State<YoloVideo> {
     final Size size = MediaQuery.of(context).size;
     if (!isLoaded) {
       return const Scaffold(
-        body: Center(
-          child: Text("Model not loaded, waiting for it..."),
-        ),
+        body: Center(child: Text("Model not loaded, waiting for it...")),
       );
     }
     return Scaffold(
@@ -84,7 +83,10 @@ class _YoloVideoState extends State<YoloVideo> {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                    width: 5, color: Colors.white, style: BorderStyle.solid),
+                  width: 5,
+                  color: Colors.white,
+                  style: BorderStyle.solid,
+                ),
               ),
               child: isDetecting
                   ? IconButton(
@@ -109,12 +111,14 @@ class _YoloVideoState extends State<YoloVideo> {
   }
 
   Future<void> loadYoloModel() async {
+    int threads = Platform.numberOfProcessors ~/ 2;
     await vision.loadYoloModel(
-        labels: 'assets/models/labels.txt',
-        modelPath: 'assets/models/yolov8n_float.tflite',
-        modelVersion: "yolov8",
-        numThreads: 1,
-        useGpu: true);
+      labels: 'assets/models/labels.txt',
+      modelPath: 'assets/models/yolov8n_float.tflite',
+      modelVersion: "yolov8",
+      numThreads: threads,
+      useGpu: true,
+    );
     setState(() {
       isLoaded = true;
     });
@@ -122,12 +126,13 @@ class _YoloVideoState extends State<YoloVideo> {
 
   Future<void> yoloOnFrame(CameraImage cameraImage) async {
     final result = await vision.yoloOnFrame(
-        bytesList: cameraImage.planes.map((plane) => plane.bytes).toList(),
-        imageHeight: cameraImage.height,
-        imageWidth: cameraImage.width,
-        iouThreshold: 0.4,
-        confThreshold: 0.4,
-        classThreshold: 0.5);
+      bytesList: cameraImage.planes.map((plane) => plane.bytes).toList(),
+      imageHeight: cameraImage.height,
+      imageWidth: cameraImage.width,
+      iouThreshold: 0.4,
+      confThreshold: 0.4,
+      classThreshold: 0.5,
+    );
     if (result.isNotEmpty) {
       setState(() {
         yoloResults = result;
@@ -143,10 +148,16 @@ class _YoloVideoState extends State<YoloVideo> {
       return;
     }
     await controller.startImageStream((image) async {
-      if (isDetecting) {
-        cameraImage = image;
-        yoloOnFrame(image);
-      }
+      if (!isDetecting || isProcessing) return;
+      frameCount++;
+
+      if (frameCount % (frameSkip + 1) != 0) return;
+
+      cameraImage = image;
+
+      isProcessing = true;
+      await yoloOnFrame(image);
+      isProcessing = false;
     });
   }
 
