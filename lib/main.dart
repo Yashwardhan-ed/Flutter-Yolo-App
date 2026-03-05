@@ -1,6 +1,9 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_vision/flutter_vision.dart';
 import 'package:camera/camera.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'dart:io';
 
 late List<CameraDescription> cameras;
@@ -74,6 +77,9 @@ class _YoloVideoState extends State<YoloVideo> {
             child: CameraPreview(controller),
           ),
           ...displayBoxesAroundRecognizedObjects(size),
+          CustomPaint(
+            painter: GridPainter(rows:4, cols: 2),
+          ),
           Positioned(
             bottom: 75,
             width: MediaQuery.of(context).size.width,
@@ -199,4 +205,34 @@ class _YoloVideoState extends State<YoloVideo> {
       );
     }).toList();
   }
+}
+
+class GridPainter extends CustomPainter {
+  final int rows;
+  final int cols;
+
+  GridPainter({required this.rows, required this.cols});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+    ..color = Colors.white.withValues(alpha: 0.3)
+    ..strokeWidth = 1.0
+    ..style = PaintingStyle.stroke;
+
+    // Vertical Lines
+    for(int i=1;i<cols;i++) {
+      double x = (size.width / cols) * i;
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+
+    // Horizontal Lines
+    for(int i=1;i<rows;i++) {
+      double y = (size.height / rows) * i;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
